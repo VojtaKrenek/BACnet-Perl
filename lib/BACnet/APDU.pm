@@ -5,14 +5,8 @@ package BACnet::APDU;
 use warnings;
 use strict;
 
-use Switch;
-
 use BACnet::DataTypes::ObjectIdentifier;
-use BACnet::PropertyIdentifier;
-use BACnet::PropertyArrayIndex;
 use BACnet::DataTypes::UnsignedInt;
-use BACnet::ApplicationBoolCoder;
-use BACnet::List;
 use BACnet::DataTypes::UnsignedInt;
 
 use BACnet::PDUTypes::ConfirmedRequest;
