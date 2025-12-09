@@ -16,4 +16,7 @@ WriteMakefile(
     },
     VERSION_FROM     => 'lib/BACnet/Device.pm',
     MIN_PERL_VERSION => '5.34.0',
+    test => {
+        TESTS => 't/*.t t/*/*.t'
+    },
 );
