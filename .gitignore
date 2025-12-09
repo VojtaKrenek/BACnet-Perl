@@ -1,0 +1,9 @@
+# VS code stuff
+.vscode/
+
+# Build Stuff
+MYMETA.json
+MYMETA.yml
+Makefile
+blib/
+pm_to_blib
