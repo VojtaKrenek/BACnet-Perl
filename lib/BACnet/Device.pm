@@ -1,0 +1,469 @@
+#!/usr/bin/perl
+
+package BACnet::Device;
+
+use v5.16;
+
+use warnings;
+use strict;
+use Data::Dumper;
+
+use BACnet::Subscription;
+use BACnet::Socket;
+use BACnet::APDU;
+use BACnet::PDUTypes::Utils;
+use BACnet::ServiceRequestSequences::SubscribeCOV;
+use BACnet::PDUTypes::Error;
+use BACnet::PDUTypes::SimpleACK;
+use BACnet::ServiceRequestSequences::COVConfirmedNotification;
+
+use IO::Async::Loop;
+
+our $VERSION = '0.01';
+
+sub new {
+    my ( $class, %args ) = @_;
+
+    my @subscriptions = ();    #list of subscriptions
+
+    my $io_loop = IO::Async::Loop->new;
+
+    my %args_socket = (
+        retries => 3,
+        timeout => 3,
+        io_loop => $io_loop,
+        debug   => 0,
+        addr    => $args{addr},
+        sport   => $args{sport}
+    );
+
+    my $self = {
+        socket   => undef,
+        id       => $args{id},
+        subs_ptr => \@subscriptions,
+    };
+
+    my $socket = BACnet::Socket->new( $self, %args_socket );
+
+    $self->{socket} = $socket;
+
+    bless $self, $class;
+    return $self;
+}
+
+sub _react {
+    my ( $self, $message, $source_port, $source_ip ) = @_;
+
+    #print "get message: ", Dumper($message), "\n";
+
+    if (   defined $message->{error}
+        || !defined $message->{payload}
+        || !defined $message->{payload}->{service_request}
+        || !defined $message->{payload}->{service_request}->{val}
+        || !
+        defined $message->{payload}->{service_request}->{val}
+        ->{monitored_object_identifier} )
+    {
+        return;
+    }
+
+    my $monitored_object_identifier =
+      $message->{payload}->{service_request}->{val}
+      ->{monitored_object_identifier};
+
+    for my $subscription ( @{ $self->{subs_ptr} } ) {
+        my @octets           = map { ord($_) } split //, $source_ip;
+        my $source_ip_string = join( '.', @octets );
+
+        if (   $source_ip_string eq $subscription->{host_ip}
+            && $monitored_object_identifier->{object_type} ==
+            $subscription->{obj_type}
+            && $monitored_object_identifier->{object_instance} ==
+            $subscription->{obj_inst} )
+        {
+            $subscription->{on_COV}
+              ->( $self, $message->{payload}, $source_port, $source_ip );
+
+            if (
+                $message->{payload}->isa('BACnet::PDUTypes::ConfirmedRequest') )
+            {
+                $self->send_approve(
+                    service_choice => 'ConfirmedCOVNotification',
+                    host_ip        => $source_ip_string,
+                    peer_port      => $source_port,
+                    invoke_id      => $message->{payload}->{invoke_id}
+                );
+            }
+
+            last;
+        }
+    }
+}
+
+sub _clean_subs {
+    my ($self) = @_;
+    my $current_time = time();
+    @{ $self->{subs_ptr} } = grep {
+             ( $_->{lifetime} >= $current_time - 60 )
+          || ( $_->{lifetime} == 0 )
+    } @{ $self->{subs_ptr} };
+
+    #-60 means that device let sub in list subscription time + 1 min, it
+    #helps system to stand out bursts of messages when some messages
+    #can leas in socket que some time. If the delay is longer than 1 min
+    #the system is already messed up (in most cases).
+}
+
+sub _remove_sub {
+    my ( $self, $subscription ) = @_;
+    @{ $self->{subs_ptr} } = grep {
+        !(     $_->{host_ip} eq $subscription->{host_ip}
+            && $_->{obj_type} eq $subscription->{obj_type}
+            && $_->{obj_inst} == $subscription->{obj_inst} )
+    } @{ $self->{subs_ptr} };
+}
+
+sub _add_sub {
+    my ( $self, $subscription ) = @_;
+    push @{ $self->{subs_ptr} }, $subscription;
+}
+
+sub subscribe {
+    my ( $self, @rest ) = @_;
+
+    my %args = (
+        obj_type                      => undef,
+        obj_inst                      => undef,
+        issue_confirmed_notifications => undef,
+        lifetime_in                   => undef,
+        host_ip                       => undef,
+        peer_port                     => undef,
+        on_COV                        => undef,
+        on_response                   => undef,
+        @rest,
+    );
+
+    $self->_clean_subs();
+
+    my $subscription = BACnet::Subscription->new(%args);
+
+    my $sub_time;
+
+    if ( $subscription->{lifetime} == 0 ) {
+        $sub_time = 0;
+    }
+    else {
+        $sub_time = $subscription->{lifetime} - time();
+    }
+
+    my $packet = BACnet::APDU->construct(
+        BACnet::PDUTypes::ConfirmedRequest->construct(
+            invoke_id       => $self->{id},
+            service_choice  => 'SubscribeCOV',
+            service_request =>
+              BACnet::ServiceRequestSequences::SubscribeCOV::request(
+                subscriber_process_identifier    => $self->{id},
+                monitored_object_identifier_type => $subscription->{obj_type},
+                monitored_object_identifier_instance =>
+                  $subscription->{obj_inst},
+                issue_confirmed_notifications =>
+                  $subscription->{issue_confirmed_notifications},
+                lifetime => $sub_time,
+              ),
+            flags => 0x00,
+        )
+    );
+
+    $self->_add_sub($subscription);
+
+    my $sub_res = $self->{socket}->_send_recv( $packet, $args{host_ip},
+        $args{peer_port}, ( on_response => $args{on_response} ) );
+
+    if ( !defined $sub_res->result ) {
+        _remove_sub( $self, $subscription );
+        return ( undef, "subscription failed\n" );
+    }
+
+    return ( $subscription, undef );
+}
+
+sub send_approve {
+    my ( $self, @rest ) = @_;
+
+    my %args = (
+        service_choice => undef,
+        host_ip        => undef,
+        peer_port      => undef,
+        invoke_id      => undef,
+        @rest,
+    );
+
+    my $packet = BACnet::APDU->construct(
+        BACnet::PDUTypes::SimpleACK->construct(
+            invoke_id      => $args{invoke_id},
+            service_choice => $args{service_choice},
+        )
+    );
+
+    $self->{socket}->_send( $packet, $args{host_ip}, $args{peer_port} );
+}
+
+sub read_property {
+    my ( $self, @rest ) = @_;
+
+    my %args = (
+        obj_type             => undef,
+        obj_instance         => undef,
+        property_identifier  => undef,
+        property_array_index => undef,
+        host_ip              => undef,
+        peer_port            => undef,
+        on_response          => undef,
+        @rest,
+    );
+
+    my $packet = BACnet::APDU->construct(
+        BACnet::PDUTypes::ConfirmedRequest->construct(
+            invoke_id       => $self->{id},
+            service_choice  => 'ReadProperty',
+            service_request =>
+              BACnet::ServiceRequestSequences::ReadProperty::request(
+                object_identifier_type     => $args{obj_type},
+                object_identifier_instance => $args{obj_instance},
+                property_identifier        => $args{property_identifier},
+                property_array_index       => $args{property_array_index},
+              ),
+            flags => 0x00,
+        )
+    );
+
+    my $read_res = $self->{socket}->_send_recv( $packet, $args{host_ip},
+        $args{peer_port}, ( on_response => $args{on_response} ) );
+
+    if ( !defined $read_res->result ) {
+        return ( undef, "read property failed\n" );
+    }
+
+    return;
+}
+
+sub unsubscribe {
+    my ( $self, $subscription, $on_response ) = @_;
+
+    $self->_clean_subs();
+
+    print " sub: ", Dumper($subscription), "\n";
+
+
+    my $packet = BACnet::APDU->construct(
+        BACnet::PDUTypes::ConfirmedRequest->construct(
+            invoke_id       => $self->{id},
+            service_choice  => 'SubscribeCOV',
+            service_request =>
+              BACnet::ServiceRequestSequences::SubscribeCOV::request(
+                subscriber_process_identifier    => $self->{id},
+                monitored_object_identifier_type => $subscription->{obj_type},
+                monitored_object_identifier_instance =>
+                  $subscription->{obj_inst},
+              ),
+            flags => 0x00,
+        )
+    );
+
+
+    my $sub_res = $self->{socket}->_send_recv(
+        $packet,
+        $subscription->{host_ip},
+        $subscription->{peer_port},
+        ( on_response => $on_response )
+    );
+
+    if ( !defined $sub_res->result ) {
+        return ("subscription failed\n");
+    }
+
+    _remove_sub( $self, $subscription );
+    return undef;
+}
+
+sub run {
+    my ($self) = @_;
+    $self->{socket}->{loop}->loop_forever;
+}
+
+sub stop {
+    my ($self) = @_;
+    $self->{socket}->{loop}->loop_stop;
+}
+
+sub DESTROY {
+    my ($self) = @_;
+
+    my @unsubs = @{ $self->{subs_ptr} };
+
+    foreach my $unsub (@unsubs) {
+        unsubscribe( $self, $unsub );
+    }
+}
+
+1;
+
+=encoding UTF-8
+=head1 NAME
+
+BACnet::Device - High-level interface for BACnet device communication and COV subscriptions
+
+=head1 SYNOPSIS
+
+    use BACnet::Device;
+
+    my $dev = BACnet::Device->new(
+        id    => 100,
+        addr  => '192.168.1.10',
+        sport => 47808,
+    );
+
+    my ($sub, $err) = $dev->subscribe(
+        obj_type  => 1,
+        obj_inst  => 5,
+        host_ip   => '192.168.1.20',
+        peer_port => 47808,
+        on_COV    => sub {
+            my ($dev, $payload, $port, $ip) = @_;
+            print "COV update received\n";
+        },
+    );
+
+    $dev->run;
+
+=head1 DESCRIPTION
+
+BACnet::Device provides a higher-level abstraction for communicating with
+BACnet devices using BACnet/IP.  
+It includes:
+
+=over 4
+
+=item * Management of BACnet sockets and IO::Async event loop
+
+=item * Sending Confirmed and Unconfirmed service requests
+
+=item * Subscribing to and receiving COV (Change of Value) notifications
+
+=item * Automatic SimpleACK (approve) responses for confirmed notifications
+
+=item * Automatic cleanup and lifetime handling of subscriptions
+
+=back
+
+=head1 METHODS
+
+=head2 new( %args )
+
+    my $dev = BACnet::Device->new(
+        id    => $invoke_id,
+        addr  => $local_ip,
+        sport => $local_port,
+    );
+
+Creates a new BACnet::Device instance.
+
+Required parameters:
+
+=over 4
+
+=item * C<id> – invoke ID used when sending confirmed requests
+
+=item * C<addr> – local IP address
+
+=item * C<sport> – local UDP port
+
+=back
+
+Internally creates a BACnet::Socket object and IO::Async loop.
+
+=head2 subscribe( %args )
+
+    my ($subscription, $error) = $dev->subscribe(
+        obj_type  => INT,
+        obj_inst  => INT,
+        host_ip   => "A.B.C.D",
+        peer_port => PORT,
+        on_COV    => sub { ... },
+        on_response => sub { ... },
+    );
+
+Subscribes to a COV (Change Of Value) notification for a given object on a remote BACnet device.
+
+Returns:
+
+=over 4
+
+=item * subscription object on success
+
+=item * (undef, error message) on failure
+
+=back
+
+=head2 unsubscribe( $subscription, $on_response )
+
+Cancels an existing subscription on the remote device.
+
+=head2 read_property( %args )
+
+Sends a BACnet ReadProperty request.
+
+    $dev->read_property(
+        obj_type            => INT,
+        obj_instance        => INT,
+        property_identifier => INT,
+        host_ip             => "A.B.C.D",
+        peer_port           => PORT,
+        on_response         => sub { ... },
+    );
+
+Returns C<undef> on error, otherwise nothing.
+
+=head2 send_approve( %args )
+
+Sends a SimpleACK in response to confirmed service requests (e.g. ConfirmedCOVNotification).
+
+=head2 run()
+
+Starts the IO::Async event loop and begins processing incoming BACnet messages.
+
+=head2 stop()
+
+Stops the IO::Async loop.
+
+=head2 DESTROY()
+
+Automatically unsubscribes from all active subscriptions before destruction.
+
+=head1 INTERNAL METHODS
+
+The following methods are internal and not intended for external use:
+
+=over 4
+
+=item * C<_react>
+
+=item * C<_clean_subs>
+
+=item * C<_remove_sub>
+
+=item * C<_add_sub>
+
+=back
+
+=head1 AUTHOR
+
+Vojtěch Křenek <vojtechkrenek@email.cz>
+Tomas Szaniszlo - <xszanisz@fi.muni.cz>
+
+=head1 LICENSE
+
+This library is free software; you may redistribute it and/or modify it
+under the same terms as Perl itself.
+
+=cut
