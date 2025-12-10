@@ -254,7 +254,6 @@ sub unsubscribe {
 
     print " sub: ", Dumper($subscription), "\n";
 
-
     my $packet = BACnet::APDU->construct(
         BACnet::PDUTypes::ConfirmedRequest->construct(
             invoke_id       => $self->{id},
@@ -269,7 +268,6 @@ sub unsubscribe {
             flags => 0x00,
         )
     );
-
 
     my $sub_res = $self->{socket}->_send_recv(
         $packet,
@@ -346,9 +344,9 @@ It includes:
 
 =item * Management of BACnet sockets and IO::Async event loop
 
-=item * Sending Confirmed and Unconfirmed service requests
+=item * Subscribing to another BACnet device and receiving COV (Change of Value) notifications
 
-=item * Subscribing to and receiving COV (Change of Value) notifications
+=item * Reading property of BACnet object of another BACnet device
 
 =item * Automatic SimpleACK (approve) responses for confirmed notifications
 
@@ -358,87 +356,143 @@ It includes:
 
 =head1 METHODS
 
-=head2 new( %args )
+
+=head2 new
+
+
+Example:
+
 
     my $dev = BACnet::Device->new(
-        id    => $invoke_id,
-        addr  => $local_ip,
-        sport => $local_port,
+        id => 100,
+        addr => '192.168.1.10',
+        sport => 47808,
     );
+
+
+( %args )
+
 
 Creates a new BACnet::Device instance.
 
-Required parameters:
+
+Parameters:
 
 =over 4
 
-=item * C<id> – invoke ID used when sending confirmed requests
+=item * C<id> (Int) – Identifier of the local BACnet device.
 
-=item * C<addr> – local IP address
+=item * C<addr> (Str) – Local IP address in dotted-decimal form.
 
-=item * C<sport> – local UDP port
+=item * C<sport> (Int) – Local UDP source port.
 
 =back
 
-Internally creates a BACnet::Socket object and IO::Async loop.
 
-=head2 subscribe( %args )
+Returns a new object instance.
 
-    my ($subscription, $error) = $dev->subscribe(
-        obj_type  => INT,
-        obj_inst  => INT,
-        host_ip   => "A.B.C.D",
-        peer_port => PORT,
-        on_COV    => sub { ... },
-        on_response => sub { ... },
+=head2 read_property
+
+
+Example:
+
+
+    $dev->read_property(
+        obj_type => 0,
+        obj_instance => 1,
+        property_identifier => 85,
+        host_ip => '192.168.1.20',
+        peer_port => 47808,
+        on_response => sub {
+                print "Property value received";
+            },
     );
 
-Subscribes to a COV (Change Of Value) notification for a given object on a remote BACnet device.
 
-Returns:
+( %args )
 
-=over 4
-
-=item * subscription object on success
-
-=item * (undef, error message) on failure
-
-=back
-
-=head2 unsubscribe( $subscription, $on_response )
-
-Cancels an existing subscription on the remote device.
-
-=head2 read_property( %args )
 
 Sends a BACnet ReadProperty request.
 
-    $dev->read_property(
-        obj_type            => INT,
-        obj_instance        => INT,
-        property_identifier => INT,
-        host_ip             => "A.B.C.D",
-        peer_port           => PORT,
-        on_response         => sub { ... },
+
+Parameters:
+
+
+=over 4
+
+=item * C<obj_type> (Int) – BACnet object type.
+
+=item * C<obj_instance> (Int) – Object instance.
+
+=item * C<property_identifier> (Int) – Property identifier.
+
+=item * C<property_array_index> (Int|undef) – Optional array index.
+
+=item * C<host_ip> (Str) – Target device IP.
+
+=item * C<peer_port> (Int) – Target device port.
+
+=item * C<on_response> (CodeRef) – Callback executed after response.
+
+=back
+
+=head2 send_approve
+
+
+Example:
+
+
+    $dev->send_approve(
+        service_choice => 'ConfirmedCOVNotification',
+        host_ip => '192.168.1.20',
+        peer_port => 47808,
+        invoke_id => 5,
     );
 
-Returns C<undef> on error, otherwise nothing.
 
-=head2 send_approve( %args )
+( %args )
 
-Sends a SimpleACK in response to confirmed service requests (e.g. ConfirmedCOVNotification).
+
+Sends a SimpleACK.
+
+
+Parameters:
+
+
+=over 4
+
+=item * C<service_choice> (Str) – BACnet service name.
+
+=item * C<host_ip> (Str) – Target IP.
+
+=item * C<peer_port> (Int) – Target port.
+
+=item * C<invoke_id> (Int) – Invocation identifier to acknowledge.
+
+=back
+
 
 =head2 run()
 
-Starts the IO::Async event loop and begins processing incoming BACnet messages.
+Starts the event loop.
+
+Example:
+
+    $dev->run();
+
 
 =head2 stop()
 
-Stops the IO::Async loop.
+Stops the event loop.
+
+Example:
+
+    $dev->stop();
+
 
 =head2 DESTROY()
 
-Automatically unsubscribes from all active subscriptions before destruction.
+Automatically unsubscribes from active subscriptions.
 
 =head1 INTERNAL METHODS
 
