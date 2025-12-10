@@ -1,42 +1,253 @@
-# BACperl #
+BACnet::Device - High-level interface for BACnet device communication and COV subscriptions
 
-## Introduction ##
+# SYNOPSIS
 
-BACnet-perl is set of perl modules, which implements functionality of BACnet communication protocol.
+    use BACnet::Device;
 
-## Implemented Services of Application layer ##
+    my $dev = BACnet::Device->new(
+        id    => 100,
+        addr  => '192.168.1.10',
+        sport => 47808,
+    );
 
-| Service                     | Request | Response |
-|-----------------------------|:-------:|:--------:|
-| ConfirmedCOVNotification    |   No    |   Yes    |
-| UnconfirmedCOVNotification  |   No    |   Yes    |
-| SubscribeCOV                |   Yes   |    No    |
-| ReadProperty                |   Yes   |    No    |
+    my ($sub, $err) = $dev->subscribe(
+        obj_type  => 1,
+        obj_inst  => 5,
+        host_ip   => '192.168.1.20',
+        peer_port => 47808,
+        on_COV    => sub {
+            my ($dev, $payload, $port, $ip) = @_;
+            print "COV update received\n";
+        },
+    );
 
+    $dev->run;
 
-## How to install manually ##
+# DESCRIPTION
 
-Installation works only on some UNIX like systems due to dependencies on another perl modules. If you run into trouble during installation checkout modules, on whitch this module depends and its availability for your system.
+BACnet::Device provides a higher-level abstraction for communicating with
+BACnet devices using BACnet/IP.  
+It includes:
 
-1. Open a terminal.
+- Management of BACnet sockets and IO::Async event loop
+- Subscribing to another BACnet device and receiving COV (Change of Value) notifications
+- Reading property of BACnet object of another BACnet device
+- Automatic SimpleACK (approve) responses for confirmed notifications
+- Automatic cleanup and lifetime handling of subscriptions
 
-2. Go the root file of the repository.
+# METHODS
 
-3. Run ``perl Makefile.PL``.
+## new
 
-4. Run ``sudo make``.
+Example:
 
-5. Run ``sudo make install``.
+    my $dev = BACnet::Device->new(
+        id => 100,
+        addr => '192.168.1.10',
+        sport => 47808,
+    );
 
+( %args )
 
-## How run tests manually##
+Creates a new BACnet::Device instance.
 
-1. Open a terminal.
+Parameters:
 
-2. Go the root file of the repository.
+- `id` (Int) – Identifier of the local BACnet device.
+- `addr` (Str) – Local IP address in dotted-decimal form.
+- `sport` (Int) – Local UDP source port.
 
-3. Run one of the following commands.
+Returns a new object instance.
 
-    1. ``prove -lr t`` - run all tests.
-    2. ``perl  <<path to the test script>>`` - run only one test script.
+## read\_property
 
+Example:
+
+    $dev->read_property(
+        obj_type => 0,
+        obj_instance => 1,
+        property_identifier => 85,
+        host_ip => '192.168.1.20',
+        peer_port => 47808,
+        on_response => sub {
+                print "Property value received";
+            },
+    );
+
+( %args )
+
+Sends a BACnet ReadProperty request.
+
+Parameters:
+
+- `obj_type` (Int) – BACnet object type.
+- `obj_instance` (Int) – Object instance.
+- `property_identifier` (Int) – Property identifier.
+- `property_array_index` (Int|undef) – Optional array index.
+- `host_ip` (Str) – Target device IP.
+- `peer_port` (Int) – Target device port.
+- `on_response` (CodeRef) – Callback executed after response.
+
+## subscribe
+
+Example:
+
+    my ($sub, $err) = $dev->subscribe(
+        obj_type  => 1,
+        obj_inst  => 5,
+        host_ip   => '192.168.1.20',
+        peer_port => 47808,
+        issue_confirmed_notifications => 1,
+        lifetime_in => 300,
+        on_COV    => sub {
+            my ($dev, $payload, $port, $ip) = @_;
+            print "COV update received\n";
+        },
+        on_response => sub {
+            my ($res) = @_;
+            print "Subscription response received\n";
+        },
+    );
+
+( %args )
+
+Subscribes to a BACnet object to receive COV (Change Of Value) notifications.
+
+Parameters:
+
+- `obj_type` (Int) – BACnet object type to monitor.
+- `obj_inst` (Int) – Object instance to monitor.
+- `host_ip` (Str) – Target device IP.
+- `peer_port` (Int) – Target device port.
+- `issue_confirmed_notifications` (Bool|undef) – Request confirmed notifications (1 for yes).
+- `lifetime_in` (Int|undef) – Subscription lifetime in seconds (0 for indefinite).
+- `on_COV` (CodeRef) – Callback executed on COV notification.
+- `on_response` (CodeRef|undef) – Callback executed after subscription response.
+
+Returns:
+
+- (Subscription object, undef) on success.
+- (undef error message) on failure.
+
+## unsubscribe
+
+Example:
+
+    my $err = $dev->unsubscribe(
+        $sub,
+        sub {
+            my ($res) = @_;
+            print "Unsubscription response received\n";
+        },
+    );
+
+Cancels an existing subscription on a remote BACnet device.
+
+Parameters:
+
+- `$sub` (Subscription) – Subscription object returned by `subscribe`.
+- `on_response` (CodeRef|undef) – Callback executed after unsubscription response.
+
+Returns:
+
+- undef on success.
+- Error message on failure.
+
+## send\_error
+
+Example:
+
+    $dev->send_error(
+        service_choice => 'ReadProperty',
+        invoke_id      => 42,
+        error_class    => 1,         # e.g. OBJECT
+        error_code     => 32,        # e.g. UNKNOWN_OBJECT
+        host_ip        => '192.168.1.20',
+        peer_port      => 47808,
+    );
+
+( %args )
+
+Sends a BACnet Error APDU.
+
+Parameters:
+
+- `service_choice` (Str) – BACnet service identifier associated with the original request.
+- `invoke_id` (Int) – Invoke ID of the request being answered.
+- `error_class` (Int) – BACnet error class.
+- `error_code` (Int) – BACnet error code.
+- `host_ip` (Str) – Target device IP.
+- `peer_port` (Int) – Target device port.
+
+Returns:
+
+- undef
+
+## send\_approve
+
+Example:
+
+    $dev->send_approve(
+        service_choice => 'ConfirmedCOVNotification',
+        host_ip => '192.168.1.20',
+        peer_port => 47808,
+        invoke_id => 5,
+    );
+
+( %args )
+
+Sends a SimpleACK.
+
+Parameters:
+
+- `service_choice` (Str) – BACnet service name.
+- `host_ip` (Str) – Target IP.
+- `peer_port` (Int) – Target port.
+- `invoke_id` (Int) – Invocation identifier to acknowledge.
+
+Returns:
+
+- undef
+
+## run()
+
+Starts the event loop.
+
+Example:
+
+    $dev->run();
+
+## stop()
+
+Stops the event loop.
+
+Example:
+
+    $dev->stop();
+
+## DESTROY()
+
+Automatically unsubscribes from active subscriptions.
+
+# INTERNAL METHODS
+
+The following methods are internal and not intended for external use:
+
+- `_react`
+- `_clean_subs`
+- `_remove_sub`
+- `_add_sub`
+
+# BUG REPORTS
+
+https://github.com/VojtaKrenek/BACnet-Perl/issues
+
+# AUTHOR
+
+Vojtěch Křenek <vojtechkrenek@email.cz>
+Tomas Szaniszlo - <xszanisz@fi.muni.cz>
+
+# LICENSE
+
+This library is free software; you may redistribute it and/or modify it
+under the same terms as Perl itself.

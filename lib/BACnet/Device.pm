@@ -686,6 +686,13 @@ The following methods are internal and not intended for external use:
 
 =back
 
+
+=head1 BUG REPORTS
+
+https://github.com/VojtaKrenek/BACnet-Perl/issues
+
+=cut
+
 =head1 AUTHOR
 
 Vojtěch Křenek <vojtechkrenek@email.cz>
