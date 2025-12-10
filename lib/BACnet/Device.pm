@@ -11,11 +11,11 @@ use Data::Dumper;
 use BACnet::Subscription;
 use BACnet::Socket;
 use BACnet::APDU;
-use BACnet::PDUTypes::Utils;
 use BACnet::ServiceRequestSequences::SubscribeCOV;
 use BACnet::PDUTypes::Error;
 use BACnet::PDUTypes::SimpleACK;
 use BACnet::ServiceRequestSequences::COVConfirmedNotification;
+use BACnet::ServiceRequestSequences::Utils;
 
 use IO::Async::Loop;
 
@@ -56,13 +56,14 @@ sub _react {
 
     #print "get message: ", Dumper($message), "\n";
 
-    if (   defined $message->{error}
-        || !defined $message->{payload}
+    if (   !defined $message->{payload}
         || !defined $message->{payload}->{service_request}
         || !defined $message->{payload}->{service_request}->{val}
         || !
         defined $message->{payload}->{service_request}->{val}
-        ->{monitored_object_identifier} )
+        ->{monitored_object_identifier}
+        || defined $message->{payload}->{service_request}->{val}
+        ->{monitored_object_identifier}->{error} )
     {
         return;
     }
@@ -84,8 +85,9 @@ sub _react {
             $subscription->{on_COV}
               ->( $self, $message->{payload}, $source_port, $source_ip );
 
-            if (
-                $message->{payload}->isa('BACnet::PDUTypes::ConfirmedRequest') )
+            if ( !defined $message->{error}
+                && $message->{payload}
+                ->isa('BACnet::PDUTypes::ConfirmedRequest') )
             {
                 $self->send_approve(
                     service_choice => 'ConfirmedCOVNotification',
@@ -202,6 +204,35 @@ sub send_approve {
         BACnet::PDUTypes::SimpleACK->construct(
             invoke_id      => $args{invoke_id},
             service_choice => $args{service_choice},
+        )
+    );
+
+    $self->{socket}->_send( $packet, $args{host_ip}, $args{peer_port} );
+}
+
+sub send_error {
+    my ( $self, @rest ) = @_;
+
+    my %args = (
+        service_choice => undef,
+        invoke_id      => undef,
+        error_class    => undef,
+        error_code     => undef,
+        host_ip        => undef,
+        peer_port      => undef,
+        @rest,
+    );
+
+    my $error = BACnet::ServiceRequestSequences::Utils::_error_type(
+        error_class => $args{error_class},
+        error_code  => $args{error_code},
+    );
+
+    my $packet = BACnet::APDU->construct(
+        BACnet::PDUTypes::Error->construct(
+            invoke_id       => $args{invoke_id},
+            service_choice  => $args{service_choice},
+            service_request => $error,
         )
     );
 
@@ -436,6 +467,143 @@ Parameters:
 
 =back
 
+
+=head2 subscribe
+
+Example:
+
+    my ($sub, $err) = $dev->subscribe(
+        obj_type  => 1,
+        obj_inst  => 5,
+        host_ip   => '192.168.1.20',
+        peer_port => 47808,
+        issue_confirmed_notifications => 1,
+        lifetime_in => 300,
+        on_COV    => sub {
+            my ($dev, $payload, $port, $ip) = @_;
+            print "COV update received\n";
+        },
+        on_response => sub {
+            my ($res) = @_;
+            print "Subscription response received\n";
+        },
+    );
+
+( %args )
+
+Subscribes to a BACnet object to receive COV (Change Of Value) notifications.
+
+Parameters:
+
+=over 4
+
+=item * C<obj_type> (Int) – BACnet object type to monitor.
+
+=item * C<obj_inst> (Int) – Object instance to monitor.
+
+=item * C<host_ip> (Str) – Target device IP.
+
+=item * C<peer_port> (Int) – Target device port.
+
+=item * C<issue_confirmed_notifications> (Bool|undef) – Request confirmed notifications (1 for yes).
+
+=item * C<lifetime_in> (Int|undef) – Subscription lifetime in seconds (0 for indefinite).
+
+=item * C<on_COV> (CodeRef) – Callback executed on COV notification.
+
+=item * C<on_response> (CodeRef|undef) – Callback executed after subscription response.
+
+=back
+
+Returns:
+
+=over 4
+
+=item * (Subscription object, undef) on success.
+
+=item * (undef error message) on failure.
+
+=back
+
+
+=head2 unsubscribe
+
+Example:
+
+    my $err = $dev->unsubscribe(
+        $sub,
+        sub {
+            my ($res) = @_;
+            print "Unsubscription response received\n";
+        },
+    );
+
+Cancels an existing subscription on a remote BACnet device.
+
+Parameters:
+
+=over 4
+
+=item * C<$sub> (Subscription) – Subscription object returned by C<subscribe>.
+
+=item * C<on_response> (CodeRef|undef) – Callback executed after unsubscription response.
+
+=back
+
+Returns:
+
+=over 4
+
+=item * undef on success.
+
+=item * Error message on failure.
+
+=back
+
+=head2 send_error
+
+Example:
+
+    $dev->send_error(
+        service_choice => 'ReadProperty',
+        invoke_id      => 42,
+        error_class    => 1,         # e.g. OBJECT
+        error_code     => 32,        # e.g. UNKNOWN_OBJECT
+        host_ip        => '192.168.1.20',
+        peer_port      => 47808,
+    );
+
+( %args )
+
+Sends a BACnet Error APDU.
+
+Parameters:
+
+=over 4
+
+=item * C<service_choice> (Str) – BACnet service identifier associated with the original request.
+
+=item * C<invoke_id> (Int) – Invoke ID of the request being answered.
+
+=item * C<error_class> (Int) – BACnet error class.
+
+=item * C<error_code> (Int) – BACnet error code.
+
+=item * C<host_ip> (Str) – Target device IP.
+
+=item * C<peer_port> (Int) – Target device port.
+
+=back
+
+Returns:
+
+=over 4
+
+=item * undef
+
+=back
+
+
 =head2 send_approve
 
 
@@ -468,6 +636,14 @@ Parameters:
 =item * C<peer_port> (Int) – Target port.
 
 =item * C<invoke_id> (Int) – Invocation identifier to acknowledge.
+
+=back
+
+Returns:
+
+=over 4
+
+=item * undef
 
 =back
 
