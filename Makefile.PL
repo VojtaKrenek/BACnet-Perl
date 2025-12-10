@@ -14,7 +14,7 @@ WriteMakefile(
         'IO::Async::Loop'   => '0.803',
         'IO::Async::Socket' => '0.803'
     },
-    VERSION_FROM     => 'lib/BACnet/Device.pm',
+    VERSION_FROM     => 'lib/BACnet.pm',
     MIN_PERL_VERSION => '5.34.0',
     test => {
         TESTS => 't/*.t t/*/*.t'

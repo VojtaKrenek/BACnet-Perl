@@ -19,8 +19,6 @@ use BACnet::ServiceRequestSequences::Utils;
 
 use IO::Async::Loop;
 
-our $VERSION = '0.01';
-
 sub new {
     my ( $class, %args ) = @_;
 
