@@ -562,8 +562,8 @@ Example:
     $dev->send_error(
         service_choice => 'ReadProperty',
         invoke_id      => 42,
-        error_class    => 1,         # e.g. OBJECT
-        error_code     => 32,        # e.g. UNKNOWN_OBJECT
+        error_class    => 1,
+        error_code     => 32,    
         host_ip        => '192.168.1.20',
         peer_port      => 47808,
     );
