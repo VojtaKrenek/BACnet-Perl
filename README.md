@@ -1,4 +1,4 @@
-BACnet::Device - High-level interface for BACnet device communication and COV subscriptions
+`BACnet::Device` - High-level interface for BACnet device communication and COV subscriptions
 
 # SYNOPSIS
 
@@ -25,7 +25,7 @@ BACnet::Device - High-level interface for BACnet device communication and COV su
 
 # DESCRIPTION
 
-BACnet::Device provides a higher-level abstraction for communicating with
+`BACnet::Device` provides a higher-level abstraction for communicating with
 BACnet devices using BACnet/IP.  
 It includes:
 
@@ -47,11 +47,9 @@ Example:
         sport => 47808,
     );
 
-( %args )
+Creates a new `BACnet::Device` instance.
 
-Creates a new BACnet::Device instance.
-
-Parameters:
+Parameters (`%args`):
 
 - `id` (Int) – Identifier of the local BACnet device.
 - `addr` (Str) – Local IP address in dotted-decimal form.
@@ -74,11 +72,9 @@ Example:
             },
     );
 
-( %args )
-
 Sends a BACnet ReadProperty request.
 
-Parameters:
+Parameters (`%args`):
 
 - `obj_type` (Int) – BACnet object type.
 - `obj_instance` (Int) – Object instance.
@@ -109,11 +105,9 @@ Example:
         },
     );
 
-( %args )
-
 Subscribes to a BACnet object to receive COV (Change Of Value) notifications.
 
-Parameters:
+Parameters (`%args`):
 
 - `obj_type` (Int) – BACnet object type to monitor.
 - `obj_inst` (Int) – Object instance to monitor.
@@ -166,11 +160,9 @@ Example:
         peer_port      => 47808,
     );
 
-( %args )
-
 Sends a BACnet Error APDU.
 
-Parameters:
+Parameters (`%args`):
 
 - `service_choice` (Str) – BACnet service identifier associated with the original request.
 - `invoke_id` (Int) – Invoke ID of the request being answered.
@@ -194,11 +186,9 @@ Example:
         invoke_id => 5,
     );
 
-( %args )
-
 Sends a SimpleACK.
 
-Parameters:
+Parameters (`%args`):
 
 - `service_choice` (Str) – BACnet service name.
 - `host_ip` (Str) – Target IP.

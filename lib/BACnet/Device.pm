@@ -340,7 +340,7 @@ sub DESTROY {
 =encoding UTF-8
 =head1 NAME
 
-BACnet::Device - High-level interface for BACnet device communication and COV subscriptions
+C<BACnet::Device> - High-level interface for BACnet device communication and COV subscriptions
 
 =head1 SYNOPSIS
 
@@ -367,7 +367,7 @@ BACnet::Device - High-level interface for BACnet device communication and COV su
 
 =head1 DESCRIPTION
 
-BACnet::Device provides a higher-level abstraction for communicating with
+C<BACnet::Device> provides a higher-level abstraction for communicating with
 BACnet devices using BACnet/IP.  
 It includes:
 
@@ -401,13 +401,11 @@ Example:
     );
 
 
-( %args )
+
+Creates a new C<BACnet::Device> instance.
 
 
-Creates a new BACnet::Device instance.
-
-
-Parameters:
+Parameters (C<%args>):
 
 =over 4
 
@@ -440,13 +438,11 @@ Example:
     );
 
 
-( %args )
-
 
 Sends a BACnet ReadProperty request.
 
 
-Parameters:
+Parameters (C<%args>):
 
 
 =over 4
@@ -489,11 +485,10 @@ Example:
         },
     );
 
-( %args )
 
 Subscribes to a BACnet object to receive COV (Change Of Value) notifications.
 
-Parameters:
+Parameters (C<%args>):
 
 =over 4
 
@@ -573,11 +568,9 @@ Example:
         peer_port      => 47808,
     );
 
-( %args )
-
 Sends a BACnet Error APDU.
 
-Parameters:
+Parameters (C<%args>):
 
 =over 4
 
@@ -618,13 +611,10 @@ Example:
     );
 
 
-( %args )
-
-
 Sends a SimpleACK.
 
 
-Parameters:
+Parameters (C<%args>):
 
 
 =over 4
