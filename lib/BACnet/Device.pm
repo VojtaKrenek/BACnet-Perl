@@ -480,7 +480,6 @@ Example:
             print "COV update received\n";
         },
         on_response => sub {
-            my ($res) = @_;
             print "Subscription response received\n";
         },
     );
@@ -659,6 +658,46 @@ Example:
 =head2 DESTROY()
 
 Automatically unsubscribes from active subscriptions.
+
+=head1 Data Units
+
+=head2 CALLBACK FUNCTIONS
+
+Example:
+
+    sub callback {
+        my ( $device, $message, $port, $ip ) = @_;
+    }
+
+Callback function are called with parameters:
+
+=over 4
+
+=item * C<$device> (Device) – current Device object.
+
+=item * C<$message> (PDU) – Object of type PDU. PDU classes are implemented in files in BACnet/PDUTypes folder.
+
+=item * C<$port> (Int) – Port used by sending device.
+
+=item * C<$ip> (Str) – Ip address used by sending device.
+
+=back
+
+
+=head2  Service choices
+
+
+In file C</BACnet/PDUTypes/Utils.pm> in variables:
+
+=over 4
+
+=item * C<$confirmed_service> - BACnet confirmed services
+
+=item * C<$unconfirmed_service> - BACnet unconfirmed services
+
+
+=back
+
 
 =head1 INTERNAL METHODS
 
