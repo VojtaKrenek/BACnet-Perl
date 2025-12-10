@@ -33,16 +33,6 @@ my %args = (
     id    => 42,
 );
 
-sub approve {
-    my ( $device, $message, @rest ) = @_;
-    $device->send_approve(
-        service_choice => 'ConfirmedCOVNotification',
-        host_ip        => $host_ip,
-        peer_port      => 47808,
-        invoke_id      => $message->{invoke_id},
-    );
-}
-
 my $mydevice = BACnet::Device->new(%args);
 
 # ---------------------------------------------------------------
@@ -69,16 +59,6 @@ my %args2 = (
     peer_port                     => 47808,
     on_COV                        => \&dump,
     on_response                   => \&dump,
-);
-
-my %args_read_prop = (
-    obj_type             => 0,
-    obj_instance         => 2,
-    property_identifier  => 85,
-    property_array_index => undef,
-    host_ip              => $host_ip,
-    peer_port            => 47808,
-    on_response          => \&dump,
 );
 
 sub another_sub {

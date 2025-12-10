@@ -34,32 +34,18 @@ my %args = (
     id    => 42,
 );
 
-sub approve {
-    my ( $device, $message, @rest ) = @_;
-    $device->send_approve(
-        service_choice => 'ConfirmedCOVNotification',
-        host_ip        => $host_ip,
-        peer_port      => 47808,
-        invoke_id      => $message->{invoke_id},
-    );
-}
 
 # Subscription definition
 my %args1 = (
     obj_type                      => 0,
     obj_inst                      => 1,
     issue_confirmed_notifications => FALSE,
-    lifetime_in                   => 10,
+    lifetime_in                   => 100,
     host_ip                       => $host_ip,
     peer_port                     => 47808,
     on_COV                        => \&dump,
     on_response                   => \&dump,
 );
-
-sub another_sub {
-    my ( $device, $message, @rest ) = @_;
-    $device->subscribe(%args1);
-}
 
 my $mydevice = BACnet::Device->new(%args);
 
