@@ -2,8 +2,8 @@ Changes
 examples/demoReadProp.pl
 examples/demoSubcsribe.pl
 examples/demoSubcsribeUnsubcsribe.pl
+lib/BACnet.pm
 lib/BACnet/APDU.pm
-lib/BACnet/BACnet.pm
 lib/BACnet/BVLC.pm
 lib/BACnet/DataTypes/BitString.pm
 lib/BACnet/DataTypes/Bone.pm
