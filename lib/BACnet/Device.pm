@@ -657,9 +657,9 @@ Example:
 
 Automatically unsubscribes from active subscriptions.
 
-=head1 Data Units
+=head1 DATA UNITS
 
-=head2 CALLBACK FUNCTIONS
+=head2 callback functions
 
 Example:
 
