@@ -8,7 +8,6 @@ use Future::AsyncAwait;
 use IO::Async::Socket;
 use IO::Async::Loop;
 use Socket qw(unpack_sockaddr_in inet_ntoa pack_sockaddr_in inet_aton);
-use Data::Dumper;
 
 use BACnet::Device;
 
@@ -58,8 +57,6 @@ sub _recv {
     $self->_debug("got packet from $ipaddr:$port");
 
     my $packet = BACnet::BVLC->parse($dgram);
-
-    # say STDERR Dumper $packet;
 
     $self->_debug( join( ' ', '< recv', unpack( "(H2)*", $dgram ) ) );
 
@@ -115,12 +112,6 @@ async sub _send_recv {
 
 async sub _send {
     my ( $self, $packet, $ip, $port, %args ) = @_;
-
-    #   my @octets           = map { ord($_) } split //, $ip;
-    #   my $source_ip_string = join( '.', @octets );
-
-    #   warn "ip: $source_ip_string, port: $port";
-    #   print "get message: ", Dumper($packet), "\n";
 
     my $data = $packet->data();
     $port //= $BACNET_PORT;

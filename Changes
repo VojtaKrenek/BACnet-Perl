@@ -1,6 +1,10 @@
 Revision history for BACnet-Perl
 
+0.07 2025-12-13
+    - FIX: add Future::AsyncAwait to PREREQ_PM
 
+0.06 2025-12-13
+    - FIX: chaos in Changes 
 
 0.05 2025-12-13
     - FIX: remove Switch from module

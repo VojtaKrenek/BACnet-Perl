@@ -6,7 +6,6 @@ use v5.16;
 
 use warnings;
 use strict;
-use Data::Dumper;
 
 use BACnet::Subscription;
 use BACnet::Socket;

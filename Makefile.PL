@@ -12,7 +12,8 @@ WriteMakefile(
     LICENSE   => 'perl',
     PREREQ_PM => {
         'IO::Async::Loop'   => '0.803',
-        'IO::Async::Socket' => '0.803'
+        'IO::Async::Socket' => '0.803',
+        'Future::AsyncAwait'=> '0.70'
     },
     VERSION_FROM     => 'lib/BACnet.pm',
     MIN_PERL_VERSION => '5.34.0',
