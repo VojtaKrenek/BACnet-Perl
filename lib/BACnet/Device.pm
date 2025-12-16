@@ -37,9 +37,10 @@ sub new {
     );
 
     my $self = {
-        socket   => undef,
-        id       => $args{id},
-        subs_ptr => \@subscriptions,
+        socket    => undef,
+        id        => $args{id},
+        subs_ptr  => \@subscriptions,
+        invoke_id => 0,
     };
 
     my $socket = BACnet::Socket->new( $self, %args_socket );
@@ -99,6 +100,15 @@ sub _react {
     }
 }
 
+sub _invoke_id {
+    my ($self) = @_;
+
+    my $result = $self->{invoke_id};
+    $self->{invoke_id} = ( $self->{invoke_id} + 1 ) % 256;
+
+    return $result;
+}
+
 sub _clean_subs {
     my ($self) = @_;
     my $current_time = time();
@@ -155,9 +165,11 @@ sub subscribe {
         $sub_time = $subscription->{lifetime} - time();
     }
 
+    my $invoke_id = $self->_invoke_id();
+
     my $packet = BACnet::APDU->construct(
         BACnet::PDUTypes::ConfirmedRequest->construct(
-            invoke_id       => $self->{id},
+            invoke_id       => $invoke_id,
             service_choice  => 'SubscribeCOV',
             service_request =>
               BACnet::ServiceRequestSequences::SubscribeCOV::request(
@@ -175,8 +187,9 @@ sub subscribe {
 
     $self->_add_sub($subscription);
 
-    my $sub_res = $self->{socket}->_send_recv( $packet, $args{host_ip},
-        $args{peer_port}, ( on_response => $args{on_response} ) );
+    my $sub_res =
+      $self->{socket}->_send_recv( $packet, $args{host_ip}, $args{peer_port},
+        ( on_response => $args{on_response}, invoke_id => $invoke_id ) );
 
     if ( !defined $sub_res->result ) {
         _remove_sub( $self, $subscription );
@@ -250,9 +263,11 @@ sub read_property {
         @rest,
     );
 
+    my $invoke_id = $self->_invoke_id();
+
     my $packet = BACnet::APDU->construct(
         BACnet::PDUTypes::ConfirmedRequest->construct(
-            invoke_id       => $self->{id},
+            invoke_id       => $invoke_id,
             service_choice  => 'ReadProperty',
             service_request =>
               BACnet::ServiceRequestSequences::ReadProperty::request(
@@ -265,8 +280,12 @@ sub read_property {
         )
     );
 
-    my $read_res = $self->{socket}->_send_recv( $packet, $args{host_ip},
-        $args{peer_port}, ( on_response => $args{on_response} ) );
+    my $read_res = $self->{socket}->_send_recv(
+        $packet,
+        $args{host_ip},
+        $args{peer_port},
+        ( on_response => $args{on_response}, invoke_id => $invoke_id )
+    );
 
     if ( !defined $read_res->result ) {
         return ( undef, "read property failed\n" );
@@ -280,9 +299,11 @@ sub unsubscribe {
 
     $self->_clean_subs();
 
+    my $invoke_id = $self->_invoke_id();
+
     my $packet = BACnet::APDU->construct(
         BACnet::PDUTypes::ConfirmedRequest->construct(
-            invoke_id       => $self->{id},
+            invoke_id       => $invoke_id,
             service_choice  => 'SubscribeCOV',
             service_request =>
               BACnet::ServiceRequestSequences::SubscribeCOV::request(
@@ -299,7 +320,7 @@ sub unsubscribe {
         $packet,
         $subscription->{host_ip},
         $subscription->{peer_port},
-        ( on_response => $on_response )
+        ( on_response => $on_response, invoke_id => $invoke_id )
     );
 
     if ( !defined $sub_res->result ) {
@@ -710,6 +731,8 @@ The following methods are internal and not intended for external use:
 =item * C<_remove_sub>
 
 =item * C<_add_sub>
+
+=item * C<_invoke_id>
 
 =back
 

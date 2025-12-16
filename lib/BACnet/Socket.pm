@@ -4,6 +4,8 @@ package BACnet::Socket;
 
 use v5.16;
 
+use Data::Dumper;
+
 use Future::AsyncAwait;
 use IO::Async::Socket;
 use IO::Async::Loop;
@@ -71,20 +73,22 @@ sub _recv {
 
     $self->_debug( join( ' ', '< recv', unpack( "(H2)*", $dgram ) ) );
 
-    if ( defined $self->{reader_of}{$addr}
-        && _is_response( $self->{reader_of}{$addr}{packet}, $packet ) )
+    if (   defined $packet->{payload}
+        && defined $packet->{payload}->{invoke_id}
+        && defined $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }
+        && _is_response( $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }{packet}, $packet ) )
     {
-        if ( defined $self->{reader_of}{$addr}{on_response} ) {
-            $self->{reader_of}{$addr}{on_response}
+        if ( defined $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }{on_response} ) {
+            $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }{on_response}
               ->( $self->{device}, $packet->{payload}, $port, $ip );
         }
-        my $r = delete $self->{reader_of}{$addr};
+        my $r = delete $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} };
         $self->loop->unwatch_time( $r->{timer} );
 
         if ( defined $r->{future} ) {
             $r->{future}->done($packet);
         }
-        
+
         return;
     }
 
@@ -108,12 +112,12 @@ async sub _send_recv {
         my $id = $self->loop->watch_time(
             after => $args{timeout} // $self->{timeout},
             code  => sub {
-                delete $self->{reader_of}{$addr};
+                delete $self->{reader_of}{ $addr . ':' . $args{invoke_id} };
                 $ok = 0;
                 $f->fail("no response from $ip:$port");
             },
         );
-        $self->{reader_of}{$addr} = {
+        $self->{reader_of}{ $addr . ':' . $args{invoke_id} } = {
             timer       => $id,
             future      => $f,
             packet      => $packet,
