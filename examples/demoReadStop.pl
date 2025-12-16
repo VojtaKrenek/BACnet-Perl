@@ -26,6 +26,8 @@ my $host_ip  = $ARGV[1];
 sub dump {
     my ( $device, $message, $port, $ip ) = @_;
     print "Received message:\n", Dumper($message), "\n";
+
+    $device->stop;
 }
 
 # Device initialization

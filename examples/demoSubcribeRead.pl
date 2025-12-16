@@ -13,7 +13,7 @@ use Data::Dumper;
 # ---------------------------------------------------------------
 # Command-line arguments
 # ---------------------------------------------------------------
-if (@ARGV < 2) {
+if ( @ARGV < 2 ) {
     die "Usage: $0 <local_ip> <host_ip>\n";
 }
 
@@ -47,30 +47,34 @@ my %args_sub1 = (
     host_ip                       => $host_ip,
     peer_port                     => 47808,
     on_COV                        => \&dump,
-    on_response                   => \&dump,
+    on_response                   => \&trigger_read,
 );
 
-my %args_sub2 = (
-    obj_type                      => 0,
-    obj_inst                      => 2,
-    issue_confirmed_notifications => TRUE,
-    lifetime_in                   => 100,
-    host_ip                       => $host_ip,
-    peer_port                     => 47808,
-    on_COV                        => \&dump,
-    on_response                   => \&dump,
+
+# ReadProperty request parameters
+my %args_read_prop = (
+    obj_type             => 0,
+    obj_instance         => 2,
+    property_identifier  => 85,
+    property_array_index => undef,
+    host_ip              => $host_ip,
+    peer_port            => 47808,
+    on_response          => \&dump,
 );
+
+sub trigger_read {
+    my ( $device, $message, @rest ) = @_;
+    $device->read_property(%args_read_prop);
+}
 
 # ---------------------------------------------------------------
 # Perform subscriptions
 # ---------------------------------------------------------------
 
-my ($new_sub,  $error)  = $mydevice->subscribe(%args_sub1);
-my ($new_sub2, $error2) = $mydevice->subscribe(%args_sub2);
+my ( $new_sub,  $error )  = $mydevice->subscribe(%args_sub1);
 
 # If needed, we could print errors:
 # print "Error: $error\n"   if defined $error;
-# print "Error2: $error2\n" if defined $error2;
 
 # ---------------------------------------------------------------
 
