@@ -7,6 +7,8 @@ use v5.16;
 use warnings;
 use strict;
 
+use Data::Dumper;
+
 use BACnet::Subscription;
 use BACnet::Socket;
 use BACnet::APDU;
@@ -21,7 +23,7 @@ use IO::Async::Loop;
 sub new {
     my ( $class, %args ) = @_;
 
-    my @subscriptions = ();    #list of subscriptions
+    my @subscriptions = ();
 
     my $io_loop = IO::Async::Loop->new;
 
@@ -50,8 +52,6 @@ sub new {
 
 sub _react {
     my ( $self, $message, $source_port, $source_ip ) = @_;
-
-    #print "get message: ", Dumper($message), "\n";
 
     if (   !defined $message->{payload}
         || !defined $message->{payload}->{service_request}
@@ -280,8 +280,6 @@ sub unsubscribe {
 
     $self->_clean_subs();
 
-    print " sub: ", Dumper($subscription), "\n";
-
     my $packet = BACnet::APDU->construct(
         BACnet::PDUTypes::ConfirmedRequest->construct(
             invoke_id       => $self->{id},
@@ -305,7 +303,7 @@ sub unsubscribe {
     );
 
     if ( !defined $sub_res->result ) {
-        return ("subscription failed\n");
+        return ("unsubscription failed\n");
     }
 
     _remove_sub( $self, $subscription );
@@ -319,17 +317,18 @@ sub run {
 
 sub stop {
     my ($self) = @_;
-    $self->{socket}->{loop}->loop_stop;
+    $self->{socket}->_stop();
+}
+
+sub subscriptions {
+    my ($self) = @_;
+
+    $self->_clean_subs();
+    return @{ $self->{subs_ptr} };
 }
 
 sub DESTROY {
     my ($self) = @_;
-
-    my @unsubs = @{ $self->{subs_ptr} };
-
-    foreach my $unsub (@unsubs) {
-        unsubscribe( $self, $unsub );
-    }
 }
 
 1;
@@ -652,9 +651,11 @@ Example:
     $dev->stop();
 
 
-=head2 DESTROY()
+=head2 subscriptions()
 
-Automatically unsubscribes from active subscriptions.
+Returns list of active and less than 60 second expired subscriptions.
+
+=head2 DESTROY()
 
 =head1 DATA UNITS
 

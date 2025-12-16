@@ -43,6 +43,17 @@ sub new {
     return $self;
 }
 
+sub _stop {
+
+    my ($self) = @_;
+
+    $self->loop->delay_future( after => 2, )->on_done(
+        sub {
+            $self->loop->stop;
+        }
+    );
+}
+
 sub _debug {
     my ( $self, @msg ) = @_;
     return if !$self->{debug};
@@ -69,7 +80,11 @@ sub _recv {
         }
         my $r = delete $self->{reader_of}{$addr};
         $self->loop->unwatch_time( $r->{timer} );
-        $r->{future}->done($packet);
+
+        if ( defined $r->{future} ) {
+            $r->{future}->done($packet);
+        }
+        
         return;
     }
 
