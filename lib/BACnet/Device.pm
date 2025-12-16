@@ -673,7 +673,7 @@ Example:
 
 =head2 subscriptions()
 
-Returns list of active and less than 60 second expired subscriptions.
+Returns list of active and less than 60 seconds expired subscriptions.
 
 =head2 DESTROY()
 
