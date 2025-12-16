@@ -104,7 +104,7 @@ sub _invoke_id {
     my ($self) = @_;
 
     my $result = $self->{invoke_id};
-    $self->{invoke_id} = ( $self->{invoke_id} + 1 ) % 256;
+    $self->{invoke_id} = ( $self->{invoke_id}  + 1) % 256;
 
     return $result;
 }
@@ -280,12 +280,9 @@ sub read_property {
         )
     );
 
-    my $read_res = $self->{socket}->_send_recv(
-        $packet,
-        $args{host_ip},
-        $args{peer_port},
-        ( on_response => $args{on_response}, invoke_id => $invoke_id )
-    );
+    my $read_res =
+      $self->{socket}->_send_recv( $packet, $args{host_ip}, $args{peer_port},
+        ( on_response => $args{on_response}, invoke_id => $invoke_id ) );
 
     if ( !defined $read_res->result ) {
         return ( undef, "read property failed\n" );
@@ -322,6 +319,8 @@ sub unsubscribe {
         $subscription->{peer_port},
         ( on_response => $on_response, invoke_id => $invoke_id )
     );
+
+    $sub_res->get;
 
     if ( !defined $sub_res->result ) {
         return ("unsubscription failed\n");

@@ -29,6 +29,7 @@ sub new {
         debug   => $args{debug},
         stime   => time,           # for debugging timestamps
         device  => $device,
+        locks   => {},
     };
     bless $self, $class;
 
@@ -73,16 +74,28 @@ sub _recv {
 
     $self->_debug( join( ' ', '< recv', unpack( "(H2)*", $dgram ) ) );
 
-    if (   defined $packet->{payload}
+    if (
+           defined $packet->{payload}
         && defined $packet->{payload}->{invoke_id}
-        && defined $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }
-        && _is_response( $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }{packet}, $packet ) )
+        && defined $self->{reader_of}
+        { $addr . ':' . $packet->{payload}{invoke_id} }
+        && _is_response(
+            $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }
+              {packet},
+            $packet
+        )
+      )
     {
-        if ( defined $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }{on_response} ) {
-            $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }{on_response}
+        if (
+            defined $self->{reader_of}
+            { $addr . ':' . $packet->{payload}{invoke_id} }{on_response} )
+        {
+            $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} }
+              {on_response}
               ->( $self->{device}, $packet->{payload}, $port, $ip );
         }
-        my $r = delete $self->{reader_of}{ $addr . ':' . $packet->{payload}{invoke_id} };
+        my $r = delete $self->{reader_of}
+          { $addr . ':' . $packet->{payload}{invoke_id} };
         $self->loop->unwatch_time( $r->{timer} );
 
         if ( defined $r->{future} ) {
@@ -102,6 +115,9 @@ async sub _send_recv {
     my $addr = pack_sockaddr_in( $port, inet_aton($ip) );
 
     my $retries = $args{retries} // $self->{retries};
+
+    my $lock = await $self->_lock_adr( $addr . ':' . $args{invoke_id} );
+
     while ( $retries-- ) {
         $self->_debug( join( ' ', '> send', unpack( "(H2)*", $data ) ) );
         $self->sock->send( $data, 0, $addr );
@@ -126,7 +142,29 @@ async sub _send_recv {
         return $f->get if ( $f->await->is_done && $ok );
     }
 
+    $self->_unlock_adr( $lock, $addr . ':' . $args{invoke_id} );
+
     return undef;
+}
+
+async sub _lock_adr {
+    my ( $self, $key ) = @_;
+
+    while ( my $existing = $self->{locks}{$key} ) {
+        await $existing;
+    }
+
+    my $lock = $self->loop->new_future;
+    $self->{locks}{$key} = $lock;
+
+    return $lock;
+}
+
+sub _unlock_adr {
+    my ( $self, $lock, $key ) = @_;
+
+    $lock->done;
+    $self->{locks}{$key} = undef;
 }
 
 async sub _send {
